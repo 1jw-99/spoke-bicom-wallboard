@@ -1,0 +1,26 @@
+# systemd unit. Install:
+#   sudo cp deploy/spoke-wallboard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now spoke-wallboard
+[Unit]
+Description=Spoke Bicom wallboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wallboard
+Group=wallboard
+WorkingDirectory=/opt/spoke-bicom-wallboard
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/spoke-bicom-wallboard/probe-output
+
+[Install]
+WantedBy=multi-user.target

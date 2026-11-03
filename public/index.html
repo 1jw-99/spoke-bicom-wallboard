@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spoke Platform Wallboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="board">
+  <header class="top">
+    <div class="brand">
+      <div class="logo-chip"><img src="spoke-logo.png" alt="Spoke"></div>
+      <div>
+        <h1>Platform Wallboard</h1>
+        <p class="sub" id="subtitle">Bicom PBXware · connecting…</p>
+      </div>
+    </div>
+    <div class="status">
+      <span class="live" id="live"><span class="dot"></span><span id="live-text">Connecting</span></span>
+      <span class="clock" id="clock">--:--</span>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Platform totals"></section>
+
+  <section class="main">
+    <article class="card tenants">
+      <div class="card-head">
+        <h2>Busiest tenants</h2>
+        <span class="hint" id="tenant-hint"></span>
+      </div>
+      <table class="table" id="tenant-table">
+        <thead>
+          <tr><th scope="col">Tenant</th><th scope="col" class="num">Online</th><th scope="col" class="num">On a call</th><th scope="col" class="num">Calls now</th><th scope="col" class="num">Today</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </article>
+
+    <article class="card featured">
+      <div class="card-head">
+        <h2 id="featured-title">Extensions</h2>
+        <div class="legend">
+          <span><i class="sw available"></i>Available</span>
+          <span><i class="sw on_call"></i>On a call</span>
+          <span><i class="sw dnd"></i>DND</span>
+          <span><i class="sw offline"></i>Offline</span>
+        </div>
+      </div>
+      <div class="agents" id="agents"></div>
+      <p class="hint foot" id="featured-hint"></p>
+    </article>
+  </section>
+
+  <section class="bottom">
+    <article class="card calls">
+      <div class="card-head">
+        <h2>Live calls <span class="muted" id="calls-count"></span></h2>
+      </div>
+      <div class="call-list" id="calls"></div>
+    </article>
+
+    <article class="card hourly">
+      <div class="card-head">
+        <h2>Calls by hour, today</h2>
+        <div class="legend">
+          <span><i class="sw answered"></i>Answered</span>
+          <span><i class="sw missed"></i>Not answered</span>
+        </div>
+      </div>
+      <div class="bars" id="bars"></div>
+    </article>
+
+    <article class="card health">
+      <div class="card-head"><h2>Platform health</h2></div>
+      <div id="trunks" class="health-list"></div>
+      <div id="services" class="health-list services"></div>
+      <div id="system" class="meters"></div>
+    </article>
+  </section>
+</div>
+<script src="app.js" type="module"></script>
+</body>
+</html>

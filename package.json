@@ -1,0 +1,17 @@
+{
+  "name": "spoke-bicom-wallboard",
+  "version": "0.1.0",
+  "description": "Spoke internal wallboard for Bicom PBXware 7.6 (phones & calls view)",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "WALLBOARD_SOURCE=mock node --watch src/server.js",
+    "probe": "node scripts/probe.js",
+    "test": "node --test test/*.test.js"
+  },
+  "license": "UNLICENSED"
+}

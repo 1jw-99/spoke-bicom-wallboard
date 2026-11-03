@@ -1,0 +1,12 @@
+# Caddy reverse proxy with automatic HTTPS (Let's Encrypt).
+# Replace the hostname, then: sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile && sudo systemctl reload caddy
+wallboard.spoketechnology.com {
+	# Optional: only allow the office / VPN to reach the wallboard at all
+	# @blocked not remote_ip 203.0.113.10 198.51.100.0/24
+	# respond @blocked "Forbidden" 403
+
+	reverse_proxy 127.0.0.1:8080 {
+		# Server-Sent Events: don't buffer
+		flush_interval -1
+	}
+}
