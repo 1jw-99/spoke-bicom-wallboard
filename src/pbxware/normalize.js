@@ -17,6 +17,15 @@ export function toBool(v) {
   return false;
 }
 
+/** Flags such as dnd / on_call: PBXware 7.6 sends "" when off; treat any other value as on unless it says no. */
+export function toFlag(v) {
+  if (typeof v === 'string') {
+    const t = v.trim().toLowerCase();
+    return t !== '' && !['0', 'no', 'false', 'off', 'n'].includes(t);
+  }
+  return toBool(v);
+}
+
 export function toNum(v, fallback = 0) {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   if (typeof v === 'string') {
@@ -48,8 +57,8 @@ export function normalizeMonitorList(raw) {
   return entries(raw)
     .map(([id, e]) => {
       const online = toBool(e.status);
-      const onCall = toBool(e.on_call);
-      const dnd = toBool(e.dnd);
+      const onCall = toFlag(e.on_call);
+      const dnd = toFlag(e.dnd);
       let status = 'offline';
       if (online) status = onCall ? 'on_call' : dnd ? 'dnd' : 'available';
       else if (onCall) status = 'on_call'; // defensive: trust on_call if set

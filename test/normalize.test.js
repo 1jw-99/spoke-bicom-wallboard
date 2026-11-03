@@ -110,3 +110,15 @@ test('CDR date and time arguments', () => {
   assert.equal(N.cdrDate(d, 'UTC'), 'Feb-01-2009');
   assert.equal(N.cdrTime(d, 'UTC'), '23:59:59');
 });
+
+test('monitor.list as returned by PBXware 7.6.4 (empty strings for off flags)', async () => {
+  const { normalizeMonitorList, toFlag } = await import('../src/pbxware/normalize.js');
+  const list = normalizeMonitorList({
+    1: { name: 'A', ext: '100', ip: '', status: 'offline', ua: '', dnd: '', on_call: '' },
+    2: { name: 'B', ext: '101', ip: '10.0.0.2', status: 'online', ua: 'Yealink', dnd: '', on_call: '' },
+    3: { name: 'C', ext: '102', ip: '10.0.0.3', status: 'online', ua: 'Yealink', dnd: '', on_call: 'Yes' },
+    4: { name: 'D', ext: '103', ip: '10.0.0.4', status: 'online', ua: 'Yealink', dnd: 'DND', on_call: '' },
+  });
+  assert.deepEqual(list.map((e) => e.status), ['offline', 'available', 'on_call', 'dnd']);
+  assert.equal(toFlag('no'), false);
+});
