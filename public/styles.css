@@ -83,7 +83,8 @@ h2 .sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6
 .sw.missed { background: var(--amber); }
 
 /* agent grid */
-.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; align-content: start; }
+.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; align-content: start; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.agents, .call-list { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .agent { border: 1px solid var(--c); border-left: 6px solid var(--c); background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
 .agent .row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .agent .name { font-family: Montserrat, sans-serif; font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -95,7 +96,10 @@ h2 .sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6
 .agent.offline { --c: var(--grey); --bg: rgba(100, 115, 140, 0.10); }
 
 /* live calls */
-.call-list { display: flex; flex-direction: column; }
+.call-list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.call { flex: none; }
+.more-btn { flex: none; align-self: flex-start; margin-top: 8px; font: 600 14px Montserrat, sans-serif; color: var(--sky); background: transparent; border: 0; padding: 4px 0; cursor: pointer; }
+.more-btn:hover { text-decoration: underline; }
 .call { display: grid; grid-template-columns: 22px minmax(0, 1.3fr) minmax(0, 1fr) 64px; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
 .call .who { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .call .with { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -132,6 +136,7 @@ h2 .sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6
 @media (max-width: 1200px), (max-height: 760px) {
   .board { height: auto; min-height: 100vh; grid-template-rows: none; overflow: visible; }
   .bottom { min-height: 290px; }
+  .agents, .call-list { max-height: 60vh; }
 }
 @media (max-width: 1200px) {
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -13,6 +13,7 @@ let lastMessageAt = 0;
 let selectedId = (location.hash.match(/tenant=(\d+)/) || [])[1] || null;
 let detail = null; // last /api/tenant/:id response for a tenant that isn't the server's default
 let detailTimer = null;
+let callsExpanded = false; // "+ N more" clicked: show every live call (the list scrolls)
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -206,6 +207,9 @@ function renderFeatured() {
     return;
   }
   const genSec = Date.parse(f.updatedAt || snap.generatedAt) / 1000;
+  const sameTenant = box.dataset.tenant === f.tenantId;
+  const scrollTop = sameTenant ? box.scrollTop : 0;
+  box.dataset.tenant = f.tenantId;
   box.replaceChildren(
     ...f.agents.map((a) => {
       const n = el('div', `agent ${a.status}`);
@@ -222,6 +226,7 @@ function renderFeatured() {
     }),
   );
   if (f.agents.length === 0) box.replaceChildren(el('div', 'empty', 'No extensions found for this tenant.'));
+  box.scrollTop = scrollTop;
   $('featured-hint').textContent = `${f.extensions.online} of ${f.extensions.total} online · ${f.calls.now} calls now · ${f.calls.today} today · ${f.tenantId === snap.featured?.tenantId ? 'busiest tenant right now' : 'click a tenant on the left to switch'}`;
 }
 
@@ -247,13 +252,26 @@ function arrow(path, label) {
   return svg;
 }
 
+function moreButton(text) {
+  const b = el('button', 'more-btn', text);
+  b.type = 'button';
+  b.addEventListener('click', () => {
+    callsExpanded = !callsExpanded;
+    renderCalls();
+    if (!callsExpanded) $('calls').scrollTop = 0;
+  });
+  return b;
+}
+
 function renderCalls() {
   const calls = [...(snap.platform.liveCalls || [])].sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity));
   $('calls-count').textContent = `(${calls.length})`;
   const box = $('calls');
   if (calls.length === 0) return box.replaceChildren(el('div', 'empty', 'No calls in progress.'));
+  const limit = callsExpanded ? calls.length : 5;
+  const scrollTop = box.scrollTop;
   box.replaceChildren(
-    ...calls.slice(0, 5).map((c) => {
+    ...calls.slice(0, limit).map((c) => {
       // A call is shown from the extension's point of view where we can tell which side is ours.
       const fromIsExt = !!c.fromName && /^\d{2,6}$/.test(c.fromNumber);
       const toIsExt = !!c.toName && /^\d{2,6}$/.test(c.toNumber);
@@ -266,8 +284,9 @@ function renderCalls() {
       row.append(arrow(outbound ? ARROW_OUT : ARROW_IN, outbound ? 'Outbound' : 'Inbound'), el('span', 'who', who), el('span', 'with', `${outbound ? 'to' : 'from'} ${other}`), dur);
       return row;
     }),
-    ...(calls.length > 5 ? [el('div', 'empty', `+ ${calls.length - 5} more`)] : []),
+    ...(calls.length > 5 ? [moreButton(callsExpanded ? 'Show fewer' : `+ ${calls.length - 5} more`)] : []),
   );
+  box.scrollTop = scrollTop;
 }
 
 // ---------- hourly chart ----------
