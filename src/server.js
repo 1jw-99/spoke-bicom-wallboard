@@ -115,6 +115,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const shutdown = () => {
     source.stop();
     server.close(() => process.exit(0));
+    // Open SSE streams never end on their own, so close them rather than wait.
+    server.closeAllConnections();
+    setTimeout(() => process.exit(0), 2000).unref();
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
