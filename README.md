@@ -9,7 +9,8 @@ What it shows:
 
 - Platform calls now, in the last hour and today, extensions online, SIP registrations and trunk status
 - The busiest tenants (calls now, agents on a call, extensions online)
-- A **featured tenant** agent grid (available / on a call / DND / offline), rotating among the busiest tenants
+- A clickable tenant list (busiest first). The extensions panel opens on the busiest tenant; click any tenant to view its
+  extensions (available / on a call / DND / offline). Add `#tenant=<ID>` to the address to pin a TV to one tenant
 - Live calls, calls by hour (from CDRs) and platform health (services, CPU, memory, disk)
 
 It is built so a MiRTA data source can replace the Bicom one later without changing the page (see
@@ -66,8 +67,7 @@ All settings are in `.env` (see `.env.example`). The main ones:
 | `POLL_PLATFORM_SECONDS` | 5 | Platform totals, live calls, trunks |
 | `POLL_TENANT_CYCLE_SECONDS` | 120 | Time to refresh every tenant once |
 | `POLL_CDR_SECONDS` | 60 | Calls-by-hour refresh |
-| `FEATURE_ROTATE_SECONDS` | 20 | How often the featured tenant changes |
-| `FEATURED_TENANTS` | busiest | Fixed list of tenant IDs to rotate through instead |
+| `FEATURED_TENANTS` | busiest | Tenant ID to open on instead of the busiest (first in the list) |
 | `PBXWARE_MAX_CONCURRENCY` | 2 | Maximum API requests in flight |
 
 At the defaults with ~125 tenants the wallboard makes about 3 API requests per second. Raise the intervals if the

@@ -74,6 +74,18 @@ export function createServer(config, source) {
       return res.end(JSON.stringify(latest));
     }
 
+    const tenantMatch = url.pathname.match(/^\/api\/tenant\/(\d{1,9})$/);
+    if (tenantMatch) {
+      let detail = null;
+      try {
+        detail = await source.getTenantDetail(tenantMatch[1]);
+      } catch {
+        detail = null;
+      }
+      res.writeHead(detail ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...SECURITY_HEADERS });
+      return res.end(JSON.stringify(detail ?? { error: 'Unknown tenant' }));
+    }
+
     if (url.pathname === '/api/stream') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', ...SECURITY_HEADERS });
       res.write(`data: ${JSON.stringify(latest)}\n\n`);

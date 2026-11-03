@@ -29,20 +29,23 @@
   <section class="main">
     <article class="card tenants">
       <div class="card-head">
-        <h2>Busiest tenants</h2>
+        <h2>Tenants <span class="sub">busiest first</span></h2>
         <span class="hint" id="tenant-hint"></span>
       </div>
+      <div class="table-scroll">
       <table class="table" id="tenant-table">
         <thead>
           <tr><th scope="col">Tenant</th><th scope="col" class="num">Online</th><th scope="col" class="num">On a call</th><th scope="col" class="num">Calls now</th><th scope="col" class="num">Today</th></tr>
         </thead>
         <tbody></tbody>
       </table>
+      </div>
     </article>
 
     <article class="card featured">
       <div class="card-head">
         <h2 id="featured-title">Extensions</h2>
+        <button type="button" class="busiest-btn" id="busiest-btn" hidden>Show busiest</button>
         <div class="legend">
           <span><i class="sw available"></i>Available</span>
           <span><i class="sw on_call"></i>On a call</span>

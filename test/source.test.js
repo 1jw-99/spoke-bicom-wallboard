@@ -9,7 +9,7 @@ const config = {
   tenants: 'all',
   tenantsExclude: ['15'],
   featuredTenants: [],
-  poll: { platformSeconds: 5, tenantCycleSeconds: 120, cdrSeconds: 60, featureRotateSeconds: 20 },
+  poll: { platformSeconds: 5, tenantCycleSeconds: 120, cdrSeconds: 60 },
 };
 
 test('snapshot is built from platform, tenant and CDR polls', async () => {
@@ -19,7 +19,8 @@ test('snapshot is built from platform, tenant and CDR polls', async () => {
   for (const id of source.tenantOrder) await source.refreshTenant(id);
   await source.pollPlatform();
   await source.pollCdrs();
-  await source.rotateFeatured();
+  source.chooseDefault();
+  await source.refreshDetail(source.defaultTenantId);
 
   const snap = source.getSnapshot();
   assert.equal(snap.source, 'mock');
@@ -49,5 +50,20 @@ test('a failing tenant poll is recorded without breaking the snapshot', async ()
   const t = source.getSnapshot().tenants.find((x) => x.id === '10');
   assert.equal(t.error, 'boom');
   assert.match(source.health.lastError, /tenant 10: boom/);
+  source.stop();
+});
+
+test('a viewer can pick any tenant; it is then kept fresh while watched', async () => {
+  const source = new Pbxware7Source(config, createMockClient({ seed: 5 }), { label: 'mock' });
+  await source.refreshTenantList();
+  for (const id of source.tenantOrder) await source.refreshTenant(id);
+  source.chooseDefault();
+  const other = source.tenantOrder.find((id) => id !== source.defaultTenantId);
+  const d = await source.getTenantDetail(other);
+  assert.equal(d.tenantId, other);
+  assert.ok(d.agents.length > 0);
+  assert.ok(source.activeDetailIds().includes(other), 'picked tenant is refreshed each tick');
+  assert.ok(source.activeDetailIds().includes(source.defaultTenantId));
+  assert.equal(await source.getTenantDetail('99999'), null, 'unknown tenant');
   source.stop();
 });

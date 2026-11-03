@@ -59,7 +59,16 @@ h2 { margin: 0; font-size: 20px; font-weight: 700; }
 .table td { padding: 8px 0; border-bottom: 1px solid var(--line); }
 .table .num { text-align: right; }
 .table td.name { font-family: Montserrat, sans-serif; font-weight: 600; max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
-.table tr.featured td { color: var(--sky); }
+.table-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.table thead th { position: sticky; top: 0; background: var(--navy-800); z-index: 1; }
+.table tbody tr { cursor: pointer; }
+.table tbody tr:hover td { background: rgba(255, 255, 255, 0.04); }
+.table tbody tr:focus-visible { outline: 2px solid var(--sky); outline-offset: -2px; }
+.table tr.selected td { color: var(--sky); background: rgba(34, 161, 242, 0.08); }
+.table tr.selected td.name { box-shadow: inset 3px 0 0 var(--sky); padding-left: 8px; }
+h2 .sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.busiest-btn { margin-left: 12px; margin-right: auto; font: 600 13px Montserrat, sans-serif; color: var(--sky); background: transparent; border: 1px solid var(--sky); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.busiest-btn:hover { background: rgba(34, 161, 242, 0.12); }
 .table .warn { color: var(--amber); font-weight: 600; }
 
 /* legend */

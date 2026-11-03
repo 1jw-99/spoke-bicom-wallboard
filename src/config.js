@@ -50,7 +50,6 @@ export function loadConfig() {
       platformSeconds: int('POLL_PLATFORM_SECONDS', 5),
       tenantCycleSeconds: int('POLL_TENANT_CYCLE_SECONDS', 120),
       cdrSeconds: int('POLL_CDR_SECONDS', 60),
-      featureRotateSeconds: int('FEATURE_ROTATE_SECONDS', 20),
     },
     featuredTenants: list('FEATURED_TENANTS'),
     server: {

@@ -21,11 +21,18 @@ PBXware 7.6 has no push/webhook API, so everything is polled:
 | Platform totals, live calls, trunks, SIP registrations, services | `dashboard.calls`, `monitor.live_calls`, `monitor.trunks`, `dashboard.sip_registrations`, `dashboard.services` | every 5 s |
 | CPU / memory / disk | `dashboard.cpu`, `dashboard.memory`, `dashboard.disk_usage` | every ~30 s |
 | Each tenant's extensions and counters | `monitor.list` + `dashboard.calls` with `server=<tenant>` | one full cycle every 120 s, spread evenly |
-| Featured tenant (agent grid) | `monitor.list` + `monitor.live_calls` with `server=<tenant>` | every 5 s |
+| Agent grid: the busiest tenant, plus any tenant a viewer has clicked in the last 30 s (max 6) | `monitor.list` + `monitor.live_calls` with `server=<tenant>` | every 5 s |
 | Calls by hour | `cdr.download` (today, incremental, 1,000 per page) | every 60 s |
 
 With ~125 tenants that is roughly 3 requests per second on average, with at most
 `PBXWARE_MAX_CONCURRENCY` (default 2) in flight at once. Tune the intervals in `.env`.
+
+## Endpoints
+
+- `GET /api/stream`: Server-Sent Events, one snapshot per update
+- `GET /api/snapshot`: the latest snapshot
+- `GET /api/tenant/<id>`: one tenant's agent grid (same shape as `featured`); the page polls this every 5 s for a tenant the viewer has clicked
+- `GET /healthz`: no auth, for monitoring
 
 ## Snapshot format
 
@@ -49,7 +56,7 @@ With ~125 tenants that is roughly 3 requests per second on average, with at most
     "calls": { "now", "lastHour", "today", "answered" },
     "extensions": { "total", "online", "offline", "onCall", "available", "dnd" }
   }],
-  "featured": {
+  "featured": {   // the busiest tenant (or FEATURED_TENANTS[0]): what a new viewer sees first
     "tenantId", "name", "code", "calls", "extensions", "updatedAt",
     "agents": [{ "ext", "name", "status": "available|on_call|dnd|offline", "ua", "ip",
                  "call": { "otherName", "otherNumber", "direction": "in|out", "durationSec" } }],

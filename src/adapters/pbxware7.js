@@ -14,6 +14,9 @@ const SYSTEM_EVERY_N_TICKS = 6; // cpu / memory / disk every ~30 s at the defaul
 const CDR_OVERLAP_SEC = 300; // re-read the last 5 minutes on each CDR poll to catch late records
 const CDR_PAGE_LIMIT = 1000;
 const CDR_MAX_PAGES = 50;
+const DETAIL_WATCH_MS = 30 * 1000; // keep refreshing a picked tenant while a viewer polls it
+const DETAIL_FRESH_MS = 4 * 1000; // serve cached detail younger than this
+const DETAIL_MAX_ACTIVE = 6; // cap on tenants refreshed every tick (load on the PBX)
 
 export class Pbxware7Source extends EventEmitter {
   constructor(config, client = createClient(config.pbxware), { label = 'pbxware7' } = {}) {
@@ -38,8 +41,10 @@ export class Pbxware7Source extends EventEmitter {
       liveCalls: [],
       hourly: N.hourlyBuckets([], config.timezone),
     };
-    this.featured = { tenantId: null, agents: [], liveCalls: [], updatedAt: null };
-    this.featureIndex = 0;
+    // Agent-grid detail per tenant: the default (busiest) tenant, plus any tenant a viewer has picked.
+    this.defaultTenantId = null;
+    this.details = new Map(); // id -> { agents, liveCalls, updatedAt, watchedAt }
+    this.detailInFlight = new Map(); // id -> Promise
     this.tick = 0;
 
     this.cdr = { day: null, byId: new Map(), lastFetchSec: null };
@@ -53,7 +58,6 @@ export class Pbxware7Source extends EventEmitter {
     this.loop(() => this.pollPlatform(), this.config.poll.platformSeconds * 1000);
     this.loop(() => this.pollNextTenant(), () => this.tenantIntervalMs());
     this.loop(() => this.pollCdrs(), this.config.poll.cdrSeconds * 1000);
-    this.loop(() => this.rotateFeatured(), (this.config.poll.featureRotateSeconds ?? 20) * 1000, false);
   }
 
   stop() {
@@ -117,8 +121,8 @@ export class Pbxware7Source extends EventEmitter {
     const id = this.tenantOrder[this.tenantCursor % this.tenantOrder.length];
     this.tenantCursor = (this.tenantCursor + 1) % this.tenantOrder.length;
     await this.refreshTenant(id);
-    // Feature a tenant as soon as we have data for one, rather than waiting for the first rotation.
-    if (!this.featured.tenantId) await this.rotateFeatured();
+    // Pick a default tenant as soon as we have data for one.
+    if (!this.defaultTenantId) this.chooseDefault();
     this.publish();
   }
 
@@ -162,7 +166,8 @@ export class Pbxware7Source extends EventEmitter {
         c.call('pbxware.dashboard.disk_usage').then((r) => (this.platform.system.disk = N.normalizeUsage(r))),
       );
     }
-    if (this.featured.tenantId) calls.push(this.refreshFeatured());
+    this.chooseDefault();
+    for (const id of this.activeDetailIds()) calls.push(this.refreshDetail(id));
 
     const results = await Promise.allSettled(calls);
     const failed = results.filter((r) => r.status === 'rejected');
@@ -171,34 +176,55 @@ export class Pbxware7Source extends EventEmitter {
     this.publish();
   }
 
-  // ---------- featured tenant (agent grid) ----------
+  // ---------- tenant detail (agent grid) ----------
 
-  /** Busiest tenants first: live calls, then extensions on calls, then calls today. */
-  featureCandidates() {
-    const pinned = this.config.featuredTenants || [];
-    if (pinned.length) return pinned.filter((id) => this.tenants.has(id));
+  /** Busiest first: live calls, then extensions on calls, then calls today. */
+  busiestTenantIds() {
     return [...this.tenants.values()]
       .filter((t) => t.extensions.total > 0)
       .sort((a, b) => b.calls.now - a.calls.now || b.extensions.onCall - a.extensions.onCall || b.calls.today - a.calls.today)
-      .slice(0, 8)
       .map((t) => t.id);
   }
 
-  async rotateFeatured() {
-    const candidates = this.featureCandidates();
-    if (candidates.length === 0) return;
-    this.featureIndex = (this.featureIndex + 1) % candidates.length;
-    const id = candidates[this.featureIndex];
-    if (id !== this.featured.tenantId) {
-      this.featured = { tenantId: id, agents: this.tenants.get(id)?.agents || [], liveCalls: [], updatedAt: null };
-      await this.refreshFeatured().catch((err) => this.fail('featured', err));
-      this.publish();
-    }
+  /** The tenant a new viewer sees first: FEATURED_TENANTS[0] if set, otherwise the busiest. */
+  chooseDefault() {
+    const pinned = (this.config.featuredTenants || []).find((id) => this.tenants.has(id));
+    this.defaultTenantId = pinned || this.busiestTenantIds()[0] || this.defaultTenantId;
   }
 
-  async refreshFeatured() {
-    const id = this.featured.tenantId;
-    if (!id) return;
+  /** Tenants whose agent grid is kept fresh: the default, plus any viewed in the last 30 s (max 6). */
+  activeDetailIds() {
+    const cutoff = Date.now() - DETAIL_WATCH_MS;
+    const watched = [...this.details.entries()]
+      .filter(([, d]) => d.watchedAt > cutoff)
+      .sort((a, b) => b[1].watchedAt - a[1].watchedAt)
+      .map(([id]) => id);
+    const ids = [...new Set([this.defaultTenantId, ...watched].filter(Boolean))].slice(0, DETAIL_MAX_ACTIVE);
+    // Forget details nobody has looked at for a while.
+    for (const [id, d] of this.details) if (!ids.includes(id) && d.watchedAt < cutoff - DETAIL_WATCH_MS) this.details.delete(id);
+    return ids;
+  }
+
+  /** Called by the web server when a viewer picks a tenant. */
+  async getTenantDetail(id) {
+    id = String(id);
+    if (!this.tenants.has(id)) return null;
+    const d = this.details.get(id);
+    if (d) d.watchedAt = Date.now();
+    if (!d || !d.updatedAt || Date.now() - Date.parse(d.updatedAt) > DETAIL_FRESH_MS) {
+      await this.refreshDetail(id).catch((err) => this.fail(`tenant ${id} detail`, err));
+    }
+    return this.buildDetail(id);
+  }
+
+  refreshDetail(id) {
+    if (this.detailInFlight.has(id)) return this.detailInFlight.get(id);
+    const p = this.fetchDetail(id).finally(() => this.detailInFlight.delete(id));
+    this.detailInFlight.set(id, p);
+    return p;
+  }
+
+  async fetchDetail(id) {
     const [monitor, live] = await Promise.all([
       this.client.call('pbxware.monitor.list', { server: id }),
       this.client.call('pbxware.monitor.live_calls', { server: id }),
@@ -218,13 +244,29 @@ export class Pbxware7Source extends EventEmitter {
         };
       }
     }
-    if (this.featured.tenantId !== id) return; // rotated while we were waiting
-    this.featured = { tenantId: id, agents, liveCalls, updatedAt: new Date().toISOString() };
+    const prev = this.details.get(id);
+    this.details.set(id, { agents, liveCalls, updatedAt: new Date().toISOString(), watchedAt: prev?.watchedAt ?? (id === this.defaultTenantId ? 0 : Date.now()) });
     const t = this.tenants.get(id);
     if (t) {
       t.agents = agents;
       t.extensions = N.summariseExtensions(agents);
     }
+  }
+
+  buildDetail(id) {
+    const t = id ? this.tenants.get(id) : null;
+    if (!t) return null;
+    const d = this.details.get(id);
+    return {
+      tenantId: t.id,
+      name: t.name,
+      code: t.code,
+      calls: t.calls,
+      extensions: t.extensions,
+      agents: d?.agents ?? t.agents ?? [],
+      liveCalls: d?.liveCalls ?? [],
+      updatedAt: d?.updatedAt ?? t.updatedAt,
+    };
   }
 
   // ---------- call records (hourly chart) ----------
@@ -266,7 +308,6 @@ export class Pbxware7Source extends EventEmitter {
 
   getSnapshot() {
     const tenants = [...this.tenants.values()].map(({ agents, ...rest }) => rest);
-    const featuredTenant = this.featured.tenantId ? this.tenants.get(this.featured.tenantId) : null;
     return {
       source: this.label,
       generatedAt: new Date().toISOString(),
@@ -280,18 +321,7 @@ export class Pbxware7Source extends EventEmitter {
       },
       platform: this.platform,
       tenants,
-      featured: featuredTenant
-        ? {
-            tenantId: featuredTenant.id,
-            name: featuredTenant.name,
-            code: featuredTenant.code,
-            calls: featuredTenant.calls,
-            extensions: featuredTenant.extensions,
-            agents: this.featured.agents,
-            liveCalls: this.featured.liveCalls,
-            updatedAt: this.featured.updatedAt,
-          }
-        : null,
+      featured: this.buildDetail(this.defaultTenantId),
     };
   }
 }

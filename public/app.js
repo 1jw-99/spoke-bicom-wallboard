@@ -7,6 +7,13 @@ let snap = null;
 let clockOffsetMs = 0; // server time minus browser time
 let lastMessageAt = 0;
 
+// Which tenant's extensions are shown. On load: #tenant=ID from the address (so a TV can be
+// pinned), otherwise whichever tenant is busiest at that moment. After that it stays put until
+// the viewer clicks another tenant or "Show busiest".
+let selectedId = (location.hash.match(/tenant=(\d+)/) || [])[1] || null;
+let detail = null; // last /api/tenant/:id response for a tenant that isn't the server's default
+let detailTimer = null;
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -114,33 +121,78 @@ function renderKpis() {
 
 // ---------- tenants table ----------
 
+function selectTenant(id) {
+  if (!id) return;
+  selectedId = id;
+  history.replaceState(null, '', `#tenant=${id}`);
+  detail = null;
+  loadDetail();
+  render();
+}
+
+async function loadDetail() {
+  clearTimeout(detailTimer);
+  const id = selectedId;
+  // The server streams the default tenant's detail already; only fetch others.
+  if (id && id !== snap?.featured?.tenantId) {
+    try {
+      const res = await fetch(`api/tenant/${encodeURIComponent(id)}`, { cache: 'no-store' });
+      if (res.ok && id === selectedId) {
+        detail = await res.json();
+        renderFeatured();
+      }
+    } catch {
+      /* keep the last detail; the status dot shows connection problems */
+    }
+  }
+  detailTimer = setTimeout(loadDetail, 5000);
+}
+
 function renderTenants() {
-  const rows = [...(snap.tenants || [])]
-    .sort((a, b) => b.calls.now - a.calls.now || b.extensions.onCall - a.extensions.onCall || b.calls.today - a.calls.today || a.name.localeCompare(b.name))
-    .slice(0, 10);
+  const rows = [...(snap.tenants || [])].sort(
+    (a, b) => b.calls.now - a.calls.now || b.extensions.onCall - a.extensions.onCall || b.calls.today - a.calls.today || a.name.localeCompare(b.name),
+  );
   const tbody = $('tenant-table').querySelector('tbody');
+  const focusedId = document.activeElement?.closest?.('#tenant-table tr')?.dataset.id;
   tbody.replaceChildren(
     ...rows.map((t) => {
-      const tr = el('tr', snap.featured?.tenantId === t.id ? 'featured' : '');
+      const tr = el('tr', t.id === selectedId ? 'selected' : '');
+      tr.tabIndex = 0;
+      tr.setAttribute('aria-selected', t.id === selectedId ? 'true' : 'false');
+      tr.dataset.id = t.id;
       const name = el('td', 'name', t.name);
-      if (t.error) name.title = `Last update failed: ${t.error}`;
+      name.title = t.error ? `Last update failed: ${t.error}` : t.name;
       const online = el('td', 'num', `${t.extensions.online}/${t.extensions.total}`);
       if (t.extensions.total && t.extensions.offline > t.extensions.total / 2) online.classList.add('warn');
       tr.append(name, online, el('td', 'num', t.extensions.onCall), el('td', 'num', t.calls.now), el('td', 'num', t.calls.today));
       return tr;
     }),
   );
+  if (focusedId) tbody.querySelector(`tr[data-id="${CSS.escape(focusedId)}"]`)?.focus({ preventScroll: true });
   const h = snap.health || {};
-  $('tenant-hint').textContent = `${h.tenantCount ?? rows.length} tenants · each refreshed every ${h.tenantCycleSeconds ?? '–'} s`;
+  $('tenant-hint').textContent = `${h.tenantCount ?? rows.length} tenants · click one to view it`;
 }
 
 // ---------- featured tenant agent grid ----------
 
 const STATUS_TEXT = { available: 'Available', on_call: 'On a call', dnd: 'Do not disturb', offline: 'Offline' };
 
+function currentDetail() {
+  if (!selectedId && snap.featured) selectedId = snap.featured.tenantId;
+  if (!selectedId || selectedId === snap.featured?.tenantId) return snap.featured;
+  if (detail?.tenantId === selectedId) {
+    // Counters come from the main stream (fresher); agents from the tenant request.
+    const t = (snap.tenants || []).find((x) => x.id === selectedId);
+    return t ? { ...detail, calls: t.calls } : detail;
+  }
+  const t = (snap.tenants || []).find((x) => x.id === selectedId);
+  return t ? { tenantId: t.id, name: t.name, calls: t.calls, extensions: t.extensions, agents: null } : null;
+}
+
 function renderFeatured() {
-  const f = snap.featured;
+  const f = currentDetail();
   const box = $('agents');
+  $('busiest-btn').hidden = !snap.featured || selectedId === snap.featured.tenantId;
   if (!f) {
     $('featured-title').textContent = 'Extensions';
     box.replaceChildren(el('div', 'empty', 'Waiting for tenant data…'));
@@ -148,7 +200,12 @@ function renderFeatured() {
     return;
   }
   $('featured-title').textContent = `${f.name} · extensions`;
-  const genSec = Date.parse(snap.generatedAt) / 1000;
+  if (!f.agents) {
+    box.replaceChildren(el('div', 'empty', 'Loading extensions…'));
+    $('featured-hint').textContent = '';
+    return;
+  }
+  const genSec = Date.parse(f.updatedAt || snap.generatedAt) / 1000;
   box.replaceChildren(
     ...f.agents.map((a) => {
       const n = el('div', `agent ${a.status}`);
@@ -165,7 +222,7 @@ function renderFeatured() {
     }),
   );
   if (f.agents.length === 0) box.replaceChildren(el('div', 'empty', 'No extensions found for this tenant.'));
-  $('featured-hint').textContent = `${f.extensions.online} of ${f.extensions.total} online · ${f.calls.now} calls now · ${f.calls.today} today · rotates between the busiest tenants`;
+  $('featured-hint').textContent = `${f.extensions.online} of ${f.extensions.total} online · ${f.calls.now} calls now · ${f.calls.today} today · ${f.tenantId === snap.featured?.tenantId ? 'busiest tenant right now' : 'click a tenant on the left to switch'}`;
 }
 
 // ---------- live calls ----------
@@ -298,8 +355,8 @@ function render() {
   const tenants = snap.tenants?.length ?? 0;
   $('subtitle').textContent = `Bicom PBXware · ${tenants} tenants${snap.source === 'mock' ? ' · demo data' : ''}`;
   renderKpis();
+  renderFeatured(); // first: it settles which tenant is selected
   renderTenants();
-  renderFeatured();
   renderCalls();
   renderBars();
   renderHealth();
@@ -331,5 +388,22 @@ function connect() {
   }
 }
 
+// Rows are rebuilt on every update, so listen on the table body and select on pointerdown:
+// a click (down + up) can straddle a rebuild and be lost.
+const tenantBody = $('tenant-table').querySelector('tbody');
+tenantBody.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const tr = e.target.closest('tr[data-id]');
+  if (tr) selectTenant(tr.dataset.id);
+});
+tenantBody.addEventListener('keydown', (e) => {
+  const tr = e.target.closest('tr[data-id]');
+  if (tr && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    selectTenant(tr.dataset.id);
+  }
+});
+$('busiest-btn').addEventListener('click', () => selectTenant(snap?.featured?.tenantId));
 setInterval(tick, 1000);
+loadDetail();
 connect();
