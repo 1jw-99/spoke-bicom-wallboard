@@ -16,6 +16,9 @@ const TYPES = {
   '.ico': 'image/x-icon',
 };
 
+const MAX_CLIENT_BACKLOG_BYTES = 1024 * 1024; // ~a few updates' worth
+const BROADCAST_MIN_INTERVAL_MS = 2000;
+
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
@@ -37,21 +40,45 @@ export function checkAuth(req, { user, password }) {
   return safeEqual(u, user) && safeEqual(rest.join(':'), password);
 }
 
+/** Write to one SSE client, or drop it if it has stopped reading. Returns true if written. */
+export function sendToClient(clients, res, chunk, maxBacklog = MAX_CLIENT_BACKLOG_BYTES) {
+  if (res.destroyed || res.writableLength > maxBacklog) {
+    clients.delete(res);
+    res.destroy();
+    return false;
+  }
+  res.write(chunk);
+  return true;
+}
+
 export function createServer(config, source) {
   const publicDir = path.join(config.root, 'public');
   const clients = new Set();
   let latest = source.getSnapshot();
 
+  // Send to every connected screen. A screen that stops reading (laptop asleep, phone tab
+  // in the background, half-open connection) would otherwise make Node queue every
+  // update for it in memory until the server runs out: drop it once its backlog is
+  // large, and its EventSource reconnects by itself when it wakes up.
+  const send = (res, chunk) => sendToClient(clients, res, chunk);
+
+  // Coalesce updates: the source can emit several per second while tenants refresh.
+  let pending = null;
   source.on('update', (snap) => {
     latest = snap;
-    const msg = `data: ${JSON.stringify(snap)}\n\n`;
-    for (const res of clients) res.write(msg);
+    if (pending) return;
+    pending = setTimeout(() => {
+      pending = null;
+      const msg = `data: ${JSON.stringify(latest)}\n\n`;
+      for (const res of clients) send(res, msg);
+    }, BROADCAST_MIN_INTERVAL_MS);
+    pending.unref?.();
   });
   source.on('error', (err) => console.error(`[source] ${err.message}`));
 
   // Keep SSE connections alive through proxies.
   const keepAlive = setInterval(() => {
-    for (const res of clients) res.write(': keep-alive\n\n');
+    for (const res of clients) send(res, ': keep-alive\n\n');
   }, 25000);
   keepAlive.unref();
 
@@ -91,6 +118,7 @@ export function createServer(config, source) {
       res.write(`data: ${JSON.stringify(latest)}\n\n`);
       clients.add(res);
       req.on('close', () => clients.delete(res));
+      res.on('error', () => clients.delete(res));
       return;
     }
 

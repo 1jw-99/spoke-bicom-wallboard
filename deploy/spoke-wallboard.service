@@ -11,10 +11,13 @@ Type=simple
 User=wallboard
 Group=wallboard
 WorkingDirectory=/opt/spoke-bicom-wallboard
-ExecStart=/usr/bin/node src/server.js
-Restart=on-failure
+ExecStart=/usr/bin/node --max-old-space-size=192 src/server.js
+Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
+# Memory guard rails: restart the wallboard rather than starve the server
+MemoryHigh=300M
+MemoryMax=400M
 # Hardening
 NoNewPrivileges=true
 ProtectSystem=strict
