@@ -209,8 +209,21 @@ export function normalizeCdrPage(raw) {
 }
 
 /** Hour of day (0-23) for a Unix time in the given IANA time zone. */
+// Intl.DateTimeFormat objects hold native (ICU) memory that the garbage collector barely
+// notices, so creating one per CDR record leaked ~200 KB per poll. Create each once and reuse it.
+const formatters = new Map();
+function fmt(kind, timeZone, options) {
+  const key = `${kind}|${timeZone}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', { ...options, timeZone });
+    formatters.set(key, f);
+  }
+  return f;
+}
+
 export function localHour(unixSec, timeZone) {
-  const h = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone }).format(new Date(unixSec * 1000));
+  const h = fmt('hour', timeZone, { hour: 'numeric', hourCycle: 'h23' }).format(new Date(unixSec * 1000));
   return Number.parseInt(h, 10) % 24;
 }
 
@@ -228,7 +241,7 @@ export function hourlyBuckets(records, timeZone) {
 /** PBXware CDR date argument format: "Feb-01-2009" (mmm-dd-YYYY), in the given time zone. */
 export function cdrDate(date, timeZone) {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-GB', { timeZone, day: '2-digit', month: 'short', year: 'numeric' })
+    fmt('date', timeZone, { day: '2-digit', month: 'short', year: 'numeric' })
       .formatToParts(date)
       .map((p) => [p.type, p.value]),
   );
@@ -237,5 +250,5 @@ export function cdrDate(date, timeZone) {
 
 /** "HH:MM:SS" in the given time zone. */
 export function cdrTime(date, timeZone) {
-  return new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(date);
+  return fmt('time', timeZone, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(date);
 }
