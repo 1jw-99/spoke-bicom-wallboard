@@ -76,6 +76,17 @@ export function createServer(config, source) {
   });
   source.on('error', (err) => console.error(`[source] ${err.message}`));
 
+  // Memory log every 10 minutes (journalctl -u spoke-wallboard | grep '\[mem\]'), to track down slow growth.
+  const mb = (n) => Math.round(n / 1048576);
+  const memLog = setInterval(() => {
+    const m = process.memoryUsage();
+    console.log(
+      `[mem] rss=${mb(m.rss)}MB heap=${mb(m.heapUsed)}/${mb(m.heapTotal)}MB external=${mb(m.external)}MB ` +
+        `buffers=${mb(m.arrayBuffers)}MB screens=${clients.size} ${source.debugCounts?.() ?? ''}`,
+    );
+  }, 10 * 60 * 1000);
+  memLog.unref();
+
   // Keep SSE connections alive through proxies.
   const keepAlive = setInterval(() => {
     for (const res of clients) send(res, ': keep-alive\n\n');

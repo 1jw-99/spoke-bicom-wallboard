@@ -50,7 +50,8 @@ sudo cp /opt/spoke-bicom-wallboard/.env.example /opt/spoke-bicom-wallboard/.env 
 sudo mkdir -p /opt/spoke-bicom-wallboard/probe-output
 sudo chown -R wallboard: /opt/spoke-bicom-wallboard && sudo chmod 600 /opt/spoke-bicom-wallboard/.env
 sudo cp /opt/spoke-bicom-wallboard/deploy/spoke-wallboard.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now spoke-wallboard
+sudo cp /opt/spoke-bicom-wallboard/deploy/spoke-wallboard-restart.* /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now spoke-wallboard spoke-wallboard-restart.timer
 ```
 
 Keep `HOST=127.0.0.1` and put **Caddy** in front for HTTPS (`deploy/Caddyfile.example`). Basic auth protects the

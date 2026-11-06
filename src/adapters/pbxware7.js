@@ -306,6 +306,11 @@ export class Pbxware7Source extends EventEmitter {
     this.emit('update', this.getSnapshot());
   }
 
+  /** Sizes of the in-memory collections, for the memory log. */
+  debugCounts() {
+    return `tenants=${this.tenants.size} details=${this.details.size} cdrs=${this.cdr.byId.size} inflight=${this.detailInFlight.size}`;
+  }
+
   getSnapshot() {
     const tenants = [...this.tenants.values()].map(({ agents, ...rest }) => rest);
     return {

@@ -70,6 +70,13 @@ export function createLimiter(max) {
     });
 }
 
+// Reuse connections to the PBX: ~3 requests a second would otherwise mean a fresh TCP + TLS
+// handshake each time (load on the PBX, and memory churn in the wallboard).
+const agents = {
+  'https:': new https.Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 4, timeout: 30000 }),
+  'http:': new http.Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 4, timeout: 30000 }),
+};
+
 function defaultTransport(url, { timeoutMs, tlsVerify }) {
   const lib = url.protocol === 'https:' ? https : http;
   return new Promise((resolve, reject) => {
@@ -80,10 +87,12 @@ function defaultTransport(url, { timeoutMs, tlsVerify }) {
         headers: { Accept: 'application/json', 'User-Agent': 'spoke-bicom-wallboard/0.1' },
         rejectUnauthorized: tlsVerify,
         timeout: timeoutMs,
+        agent: tlsVerify || url.protocol !== 'https:' ? agents[url.protocol] : undefined,
       },
       (res) => {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
+        res.on('error', reject);
         res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
       },
     );

@@ -1,0 +1,7 @@
+# Nightly safety-net restart of the wallboard (screens reconnect by themselves).
+[Unit]
+Description=Restart the Spoke wallboard
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart spoke-wallboard.service

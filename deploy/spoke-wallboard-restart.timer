@@ -1,0 +1,12 @@
+# Install with the service:
+#   sudo cp deploy/spoke-wallboard-restart.* /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now spoke-wallboard-restart.timer
+[Unit]
+Description=Restart the Spoke wallboard every night at 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/London
+Persistent=false
+
+[Install]
+WantedBy=timers.target
